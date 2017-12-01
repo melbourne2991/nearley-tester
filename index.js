@@ -127,13 +127,13 @@ async function nearleyTester(options = {}) {
   
   function updateGrammar() {
     console.log('Reloading grammar...');
-    state.grammar = require(grammarFilePath);
+    state.grammar = requireUncached(grammarFilePath);
   }
   
   function updateRawGrammar() {
-    console.log('Reloading grammar...');
+    console.log('Reloading (raw) grammar...');
     execSync(`nearleyc ${grammarFilePath} -o ${tmpfile.name}`);
-    state.grammar = require(tmpfile.name);
+    state.grammar = requireUncached(tmpfile.name);
   }
   
   async function readFile(_path) {
@@ -144,7 +144,7 @@ async function nearleyTester(options = {}) {
     Object.keys(state.tests).forEach((testFileName) => {
       state.tests[testFileName].forEach((test) => {
         console.log(`\nRunning: ${test.name}`.yellow);
-        const results = parseCode(state.grammar, test.code);
+        const results = parseCode(test.code);
         console.log(displayJSON(results));
       });
     });
@@ -160,7 +160,7 @@ async function nearleyTester(options = {}) {
 
     return createWatcher(dir, async () => {
       updateGrammar();
-      runTests();
+      await runTests();
     }, {
       filter: grammarFilter
     });
@@ -182,8 +182,8 @@ async function nearleyTester(options = {}) {
     return path.join(process.cwd(), _path);  
   }
 
-  function parseCode(grammar, code) {
-    const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar))
+  function parseCode(code) {
+    const parser = new nearley.Parser(nearley.Grammar.fromCompiled(state.grammar))
   
     try {
       parser.feed(code);
@@ -200,5 +200,11 @@ async function nearleyTester(options = {}) {
     }
 
     return JSON.stringify(obj);    
+  }
+
+  // Require caches modules by default
+  function requireUncached(mod){
+    delete require.cache[require.resolve(mod)]
+    return require(mod)
   }
 }
