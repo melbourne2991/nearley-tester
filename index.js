@@ -1,4 +1,3 @@
-const watch = require('watch');
 const fs = require('fs-extra');
 const nearley = require('nearley');
 const path = require('path');
@@ -8,6 +7,8 @@ const prettyjson = require('prettyjson');
 const glob = require('glob');
 const minimatch = require('minimatch');
 const colors = require('colors');
+const Watchpack = require('watchpack');
+const clearRequire = require('clear-require');
 
 module.exports = (...args) => {
   return nearleyTester(...args)
@@ -19,20 +20,21 @@ async function nearleyTester(options = {}) {
     throw new Error('Must provide a compiled grammar file or a raw grammar file');
   }
 
-  if (!options.testsDir) {
-    throw new Error('Must provide a directory for tests');
+  if (!options.testsGlobPattern) {
+    throw new Error('Must provide a glob pattern for tests');
   }
 
   options.testNamePattern = options.testNamePattern || '-- ?(.*)\n';
-  options.testsGlobPattern = options.testsGlobPattern || '**/*';
   options.disablePrettyJson = options.disablePrettyJson || false;
 
   const testNamePattern = new RegExp(options.testNamePattern, 'g');
-  const testsDir = getAbsolutePath(options.testsDir);
+
   const grammarFilePath = getAbsolutePath(options.grammarFile ? 
     options.grammarFile : 
     options.rawGrammarFile
   );
+
+  const wp = new Watchpack();
 
   // clean up on uncaught exceptions
   tmp.setGracefulCleanup();
@@ -51,42 +53,38 @@ async function nearleyTester(options = {}) {
 
   const state = {
     grammar: null,
-    tests: {}
+    tests: {},
+    watchFiles: []
   };
 
-  if (options.grammarFile) {
-    createGrammarWatcher(
-      grammarFilePath, 
-      updateGrammar
-    );
+  const testFiles = await getFilesFromGlob(options.testsGlobPattern);
+  const grammarUpdater = options.grammarFile ? updateGrammar : updateRawGrammar;
 
-    await updateGrammar();
+  createGrammarWatcher(grammarFilePath, grammarUpdater);
+  grammarUpdater();
+
+  if (options.watchGlobPatterns) {
+    const files = await getFilesFromGlobs(options.watchGlobPatterns)
+    createWatcher(files, async () => {
+      grammarUpdater();
+      await runTests();
+    });
   }
 
-  if (options.rawGrammarFile) {
-    createGrammarWatcher(
-      grammarFilePath, 
-      updateRawGrammar
-    );
-
-    await updateRawGrammar();
-  }
-
-  const testsDirGlobFilter = (file) => minimatch(file, options.testsGlobPattern);
-
-  createWatcher(testsDir, async (file) => {
+  createWatcher(testFiles, async (file) => {
     await updateTest(file);
     await runTests();
-  }, { filter: testsDirGlobFilter });
+  });
 
   await updateTests();
   await runTests();
+  
+  startWatchers();
 
   async function updateTests() {
     console.log('Reloading tests...');
-    const files = await getTestFiles();
 
-    await Promise.all(files.map((filePath) => {
+    await Promise.all(testFiles.map((filePath) => {
       return updateTest(filePath)
     }));
   }
@@ -96,10 +94,23 @@ async function nearleyTester(options = {}) {
     state.tests[testPath] = parseTestFile(content);
   }
 
-  async function getTestFiles() {
-    return globp(options.testsGlobPattern, {
+  async function getFilesFromGlobs(patterns) {
+    const files = [];
+
+    const arr = await Promise.all(patterns.map((pattern) => {
+      return getFilesFromGlob(pattern);
+    }));
+
+    arr.forEach((_files) => {
+      files.push(..._files);
+    });
+
+    return files;
+  }
+
+  async function getFilesFromGlob(pattern) {
+    return globp(pattern, {
       nodir: true,
-      cwd: testsDir,
       absolute: true
     });
   }
@@ -164,31 +175,32 @@ async function nearleyTester(options = {}) {
   }
   
   function createGrammarWatcher(_path, updateGrammar) {
-    const dir = path.dirname(_path);
-    const filename = path.basename(_path);
-  
-    const grammarFilter = (file) => {
-      return file === _path;
-    };
-
     const handleWatch = async () => {
       updateGrammar();
       await runTests();
     };
 
-    return createWatcher(dir, () => {
+    return createWatcher(_path, () => {
       handleWatch().catch(console.log);
-    }, {
-      filter: grammarFilter
     });
   }
   
-  function createWatcher(_path, cb, watchOpts = {}) {
-    watch.createMonitor(_path, watchOpts, (monitor) => {
-      monitor.on('changed', cb);
-      monitor.on('created', cb);
-      monitor.on('removed', cb);
+  function createWatcher(_paths, cb, watchOpts = {}) {
+    if(!Array.isArray(_paths)) {
+      _paths = [_paths];
+    }
+
+    state.watchFiles.push(..._paths);
+
+    wp.on('change', (file) => {
+      if (_paths.find((p) => p === file)) {
+        cb(file);        
+      }
     });
+  }
+
+  function startWatchers() {
+    wp.watch(state.watchFiles, [], Date.now());
   }
   
   function getAbsolutePath(_path) {
@@ -224,8 +236,13 @@ async function nearleyTester(options = {}) {
 
   // Require caches modules by default
   function requireUncached(mod){
-    delete require.cache[require.resolve(mod)]
+    // delete require.cache[require.resolve(mod)]
+    clearRequire.all();
     return require(mod)
+  }
+
+  function runScript() {
+
   }
 }
 
