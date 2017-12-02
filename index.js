@@ -34,7 +34,20 @@ async function nearleyTester(options = {}) {
     options.rawGrammarFile
   );
 
-  const tmpfile = tmp.fileSync();
+  // clean up on uncaught exceptions
+  tmp.setGracefulCleanup();
+
+  const tmpfile = tmp.fileSync({
+    // so that node_modules resolves relative to grammar source.
+    dir: path.dirname(grammarFilePath),
+    postfix: '.js',
+    prefix: 'tmp-parser-'
+  });
+
+  // handle ctrl-c gracefully
+  process.on('SIGINT', () => {
+    process.exit();
+  });
 
   const state = {
     grammar: null,
@@ -158,9 +171,13 @@ async function nearleyTester(options = {}) {
       return file === _path;
     };
 
-    return createWatcher(dir, async () => {
+    const handleWatch = async () => {
       updateGrammar();
       await runTests();
+    };
+
+    return createWatcher(dir, () => {
+      handleWatch().catch(console.log);
     }, {
       filter: grammarFilter
     });
@@ -188,7 +205,10 @@ async function nearleyTester(options = {}) {
     try {
       parser.feed(code);
     } catch (e) {
-      console.log('FAILED!');
+      console.log('Parse failed');
+      console.log(e);
+
+      return null;
     }
   
     return parser.results;
@@ -207,4 +227,16 @@ async function nearleyTester(options = {}) {
     delete require.cache[require.resolve(mod)]
     return require(mod)
   }
+}
+
+// windows support for SIGINT
+if (process.platform === "win32") {
+  const rl = require("readline").createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  rl.on("SIGINT", function () {
+    process.emit("SIGINT");
+  });
 }
