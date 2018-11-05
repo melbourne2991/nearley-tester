@@ -9,6 +9,9 @@
   },
   "author": "",
   "license": "ISC",
+  "peerDependencies": {
+    "nearley": ">=2.11.0"
+  },
   "dependencies": {
     "clear-require": "^2.0.0",
     "colors": "^1.1.2",
@@ -16,7 +19,6 @@
     "fs-extra": "^4.0.2",
     "glob": "^7.1.2",
     "minimatch": "^3.0.4",
-    "nearley": "^2.11.0",
     "prettyjson": "^1.2.1",
     "tmp": "^0.0.33",
     "watchpack": "^1.4.0"
