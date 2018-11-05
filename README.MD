@@ -5,7 +5,11 @@ Nearley is pretty cool but I found it lacking in utilities for developing the pa
 
 It basically takes your grammar.ne file or the compiled parser js and runs the "tests" through the parser outputting the results. It also watches for changes and automatically reruns the tests for you.
 
-Test files are just files which contain delimitters for each test, eg:
+Test files are just files which contain delimitters for each test.
+
+## Example
+
+Give we have this test file `./tests/index.test`:
 
 ```
 -- Test 1
@@ -22,9 +26,67 @@ func testc (test, another, something)
 end
 ```
 
+And our grammer file `./grammer.ne`:
+
+```
+@builtin "whitespace.ne"
+
+@{%
+const append = (a, b) => (d) => d[a].concat([d[b]]);
+%}
+
+FunctionDeclaration -> "func" _ Name _ Args _ "end" {% (d) => ({
+  name: d[2],
+  args: d[4]
+}) %}
+
+Args -> "(" _ ")"
+  | "(" _ ArgsList _ ")" {% (d) => d[2] %}
+
+ArgsList -> Name
+  | ArgsList _ "," _ Name {% append(0, 4) %}
+
+Name -> _name {% id %}
+
+_name -> [a-zA-Z_] {% id %}
+  | _name [a-zA-Z_] {% (d) => d[0] + d[1] %}
+
+```
+
+Then running `nearley-tester -r grammer.ne ./tests/**/*` gives us the follwing output:
+
+```
+Running: Test 1
+- 
+  name: testa
+  args: 
+    - test
+    - another
+    - something
+
+Running: Test 2
+- 
+  name: testb
+  args: 
+    - test
+    - another
+    - something
+
+Running: Test 3
+- 
+  name: testc
+  args: 
+    - test
+    - another
+    - something
+
+```
+
+
 ## Usage
 
 Requires a recent version of node to run - tested with v8.7.0.
+Nearley is a peer dependency and must be installed separately (tested with `^2.15.1`)
 
 `npm install -g nearley-tester`
 
