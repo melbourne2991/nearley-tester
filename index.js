@@ -1,37 +1,35 @@
-const fs = require('fs-extra');
-const nearley = require('nearley');
-const path = require('path');
-const tmp = require('tmp');
-const { execSync } = require('child_process');
-const prettyjson = require('prettyjson');
-const glob = require('glob');
-const minimatch = require('minimatch');
-const colors = require('colors');
-const Watchpack = require('watchpack');
-const clearRequire = require('clear-require');
+const fs = require("fs-extra");
+const nearley = require("nearley");
+const path = require("path");
+const tmp = require("tmp");
+const { execSync } = require("child_process");
+const prettyjson = require("prettyjson");
+const glob = require("glob");
+const Watchpack = require("watchpack");
+const clearRequire = require("clear-require");
 
 module.exports = (...args) => {
-  return nearleyTester(...args)
-    .catch(console.log);
+  return nearleyTester(...args).catch(console.log);
 };
 
 async function nearleyTester(options = {}) {
   if (!options.grammarFile && !options.rawGrammarFile) {
-    throw new Error('Must provide a compiled grammar file or a raw grammar file');
+    throw new Error(
+      "Must provide a compiled grammar file or a raw grammar file"
+    );
   }
 
   if (!options.testsGlobPattern) {
-    throw new Error('Must provide a glob pattern for tests');
+    throw new Error("Must provide a glob pattern for tests");
   }
 
-  options.testNamePattern = options.testNamePattern || '-- ?(.*)\n';
+  options.testNamePattern = options.testNamePattern || "-- ?(.*)\n";
   options.disablePrettyJson = options.disablePrettyJson || false;
 
-  const testNamePattern = new RegExp(options.testNamePattern, 'g');
+  const testNamePattern = new RegExp(options.testNamePattern, "g");
 
-  const grammarFilePath = getAbsolutePath(options.grammarFile ? 
-    options.grammarFile : 
-    options.rawGrammarFile
+  const grammarFilePath = getAbsolutePath(
+    options.grammarFile ? options.grammarFile : options.rawGrammarFile
   );
 
   const wp = new Watchpack();
@@ -42,12 +40,12 @@ async function nearleyTester(options = {}) {
   const tmpfile = tmp.fileSync({
     // so that node_modules resolves relative to grammar source.
     dir: path.dirname(grammarFilePath),
-    postfix: '.js',
-    prefix: 'tmp-parser-'
+    postfix: ".js",
+    prefix: "tmp-parser-"
   });
 
   // handle ctrl-c gracefully
-  process.on('SIGINT', () => {
+  process.on("SIGINT", () => {
     process.exit();
   });
 
@@ -64,31 +62,33 @@ async function nearleyTester(options = {}) {
   grammarUpdater();
 
   if (options.watchGlobPatterns) {
-    const files = await getFilesFromGlobs(options.watchGlobPatterns)
+    const files = await getFilesFromGlobs(options.watchGlobPatterns);
     createWatcher(files, async () => {
       grammarUpdater();
       await runTests();
     });
   }
 
-  createWatcher(testFiles, async (file) => {
+  createWatcher(testFiles, async file => {
     await updateTest(file);
     await runTests();
   });
 
   await updateTests();
   await runTests();
-  
+
   startWatchers();
 
   async function updateTests() {
-    console.log('Reloading tests...');
+    console.log("Reloading tests...");
 
-    await Promise.all(testFiles.map((filePath) => {
-      return updateTest(filePath)
-    }));
+    await Promise.all(
+      testFiles.map(filePath => {
+        return updateTest(filePath);
+      })
+    );
   }
-  
+
   async function updateTest(testPath) {
     const content = await readFile(testPath);
     state.tests[testPath] = parseTestFile(content);
@@ -97,11 +97,13 @@ async function nearleyTester(options = {}) {
   async function getFilesFromGlobs(patterns) {
     const files = [];
 
-    const arr = await Promise.all(patterns.map((pattern) => {
-      return getFilesFromGlob(pattern);
-    }));
+    const arr = await Promise.all(
+      patterns.map(pattern => {
+        return getFilesFromGlob(pattern);
+      })
+    );
 
-    arr.forEach((_files) => {
+    arr.forEach(_files => {
       files.push(..._files);
     });
 
@@ -123,57 +125,57 @@ async function nearleyTester(options = {}) {
       });
     });
   }
-  
+
   function parseTestFile(fileContent) {
-    const splits = fileContent.split(testNamePattern);  
+    const splits = fileContent.split(testNamePattern);
     const tests = [];
-  
+
     for (i = 0; i < splits.length - 1; i = i + 2) {
       let code = splits[i + 2];
-      const name = splits[i + 1]
-  
-      if (code[0] === '\n') {
+      const name = splits[i + 1];
+
+      if (code[0] === "\n") {
         code = code.slice(1, code.length);
       }
-  
-      if (code[code.length - 1 ] === '\n') {
+
+      if (code[code.length - 1] === "\n") {
         code = code.slice(0, code.length - 1);
       }
-  
+
       tests.push({
         name,
         code
       });
     }
-  
+
     return tests;
   }
-  
+
   function updateGrammar() {
-    console.log('Reloading grammar...');
+    console.log("Reloading grammar...");
     state.grammar = requireUncached(grammarFilePath);
   }
-  
+
   function updateRawGrammar() {
-    console.log('Reloading (raw) grammar...');
+    console.log("Reloading (raw) grammar...");
     execSync(`nearleyc ${grammarFilePath} -o ${tmpfile.name}`);
     state.grammar = requireUncached(tmpfile.name);
   }
-  
+
   async function readFile(_path) {
-    return fs.readFile(_path, 'utf8');
+    return fs.readFile(_path, "utf8");
   }
-  
+
   function runTests() {
-    Object.keys(state.tests).forEach((testFileName) => {
-      state.tests[testFileName].forEach((test) => {
+    Object.keys(state.tests).forEach(testFileName => {
+      state.tests[testFileName].forEach(test => {
         console.log(`\nRunning: ${test.name}`.yellow);
         const results = parseCode(test.code);
         console.log(displayJSON(results));
       });
     });
   }
-  
+
   function createGrammarWatcher(_path, updateGrammar) {
     const handleWatch = async () => {
       updateGrammar();
@@ -184,17 +186,17 @@ async function nearleyTester(options = {}) {
       handleWatch().catch(console.log);
     });
   }
-  
+
   function createWatcher(_paths, cb, watchOpts = {}) {
-    if(!Array.isArray(_paths)) {
+    if (!Array.isArray(_paths)) {
       _paths = [_paths];
     }
 
     state.watchFiles.push(..._paths);
 
-    wp.on('change', (file) => {
-      if (_paths.find((p) => p === file)) {
-        cb(file);        
+    wp.on("change", file => {
+      if (_paths.find(p => p === file)) {
+        cb(file);
       }
     });
   }
@@ -202,48 +204,48 @@ async function nearleyTester(options = {}) {
   function startWatchers() {
     wp.watch(state.watchFiles, [], Date.now());
   }
-  
+
   function getAbsolutePath(_path) {
-    if(path.isAbsolute(_path)) {
+    if (path.isAbsolute(_path)) {
       return _path;
     }
-  
-    return path.join(process.cwd(), _path);  
+
+    return path.join(process.cwd(), _path);
   }
 
   function parseCode(code) {
-    const parser = new nearley.Parser(nearley.Grammar.fromCompiled(state.grammar))
-  
+    const parser = new nearley.Parser(
+      nearley.Grammar.fromCompiled(state.grammar)
+    );
+
     try {
       parser.feed(code);
     } catch (e) {
-      console.log('Parse failed');
+      console.log("Parse failed");
       console.log(e);
 
       return null;
     }
-  
+
     return parser.results;
   }
 
   function displayJSON(obj) {
     if (!options.disablePrettyJson) {
-      return prettyjson.render(obj);    
+      return prettyjson.render(obj);
     }
 
-    return JSON.stringify(obj);    
+    return JSON.stringify(obj);
   }
 
   // Require caches modules by default
-  function requireUncached(mod){
+  function requireUncached(mod) {
     // delete require.cache[require.resolve(mod)]
     clearRequire.all();
-    return require(mod)
+    return require(mod);
   }
 
-  function runScript() {
-
-  }
+  function runScript() {}
 }
 
 // windows support for SIGINT
@@ -253,7 +255,7 @@ if (process.platform === "win32") {
     output: process.stdout
   });
 
-  rl.on("SIGINT", function () {
+  rl.on("SIGINT", function() {
     process.emit("SIGINT");
   });
 }
