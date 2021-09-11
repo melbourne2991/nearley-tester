@@ -169,7 +169,7 @@ async function nearleyTester(options = {}) {
   function runTests() {
     Object.keys(state.tests).forEach(testFileName => {
       state.tests[testFileName].forEach(test => {
-        console.log(`\nRunning: ${test.name}`.yellow);
+        console.log(`\nRunning: ${test.name}`);
         const results = parseCode(test.code);
         console.log(displayJSON(results));
       });
